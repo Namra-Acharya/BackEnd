@@ -14,7 +14,7 @@ const registerUser = async (req, res) => {
 
     if (decision.isDenied()) {
       res.writeHead(403, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ message: "Invalid email address" }));
+      return res.end(JSON.stringify({ message: "Invalid email address" }));
     }
 
     const existingUser = await User.findOne({ email });
@@ -26,7 +26,6 @@ const registerUser = async (req, res) => {
     }
 
     const salt = await bcrypt.genSalt(10);
-
     const hashPassword = await bcrypt.hash(password, salt);
 
     const newUser = await User.create({
@@ -47,7 +46,6 @@ const registerUser = async (req, res) => {
       expiresAt: new Date(Date.now() + 1 * 60 * 60 * 1000),
     });
 
-    // send email
     const verificationLink = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
     const emailBody = `<p>Click <a href="${verificationLink}">here</a> to verify your email</p>`;
     const emailSubject = "Verify your email";
@@ -60,14 +58,13 @@ const registerUser = async (req, res) => {
       });
     }
 
-    res.status(201).json({
+    return res.status(201).json({
       message:
         "Verification email sent to your email. Please check and verify your account.",
     });
   } catch (error) {
     console.log(error);
-
-    res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -92,7 +89,9 @@ const loginUser = async (req, res) => {
             "Email not verified. Please check your email for the verification link.",
         });
       } else {
-        await Verification.findByIdAndDelete(existingVerification._id);
+        if (existingVerification) {
+          await Verification.findByIdAndDelete(existingVerification._id);
+        }
 
         const verificationToken = jwt.sign(
           { userId: user._id, purpose: "email-verification" },
@@ -106,7 +105,6 @@ const loginUser = async (req, res) => {
           expiresAt: new Date(Date.now() + 1 * 60 * 60 * 1000),
         });
 
-        // send email
         const verificationLink = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
         const emailBody = `<p>Click <a href="${verificationLink}">here</a> to verify your email</p>`;
         const emailSubject = "Verify your email";
@@ -119,7 +117,7 @@ const loginUser = async (req, res) => {
           });
         }
 
-        res.status(201).json({
+        return res.status(201).json({
           message:
             "Verification email sent to your email. Please check and verify your account.",
         });
@@ -144,15 +142,14 @@ const loginUser = async (req, res) => {
     const userData = user.toObject();
     delete userData.password;
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "Login successful",
       token,
       user: userData,
     });
   } catch (error) {
     console.log(error);
-
-    res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -172,18 +169,13 @@ const verifyEmail = async (req, res) => {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const verification = await Verification.findOne({
-      userId,
-      token,
-    });
+    const verification = await Verification.findOne({ userId, token });
 
     if (!verification) {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const isTokenExpired = verification.expiresAt < new Date();
-
-    if (isTokenExpired) {
+    if (verification.expiresAt < new Date()) {
       return res.status(401).json({ message: "Token expired" });
     }
 
@@ -199,13 +191,12 @@ const verifyEmail = async (req, res) => {
 
     user.isEmailVerified = true;
     await user.save();
-
     await Verification.findByIdAndDelete(verification._id);
 
-    res.status(200).json({ message: "Email verified successfully" });
+    return res.status(200).json({ message: "Email verified successfully" });
   } catch (error) {
     console.log(error);
-    res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -220,9 +211,7 @@ const resetPasswordRequest = async (req, res) => {
     }
 
     if (!user.isEmailVerified) {
-      return res
-        .status(400)
-        .json({ message: "Please verify your email first" });
+      return res.status(400).json({ message: "Please verify your email first" });
     }
 
     const existingVerification = await Verification.findOne({
@@ -263,10 +252,10 @@ const resetPasswordRequest = async (req, res) => {
       });
     }
 
-    res.status(200).json({ message: "Reset password email sent" });
+    return res.status(200).json({ message: "Reset password email sent" });
   } catch (error) {
     console.log(error);
-    res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -286,18 +275,13 @@ const verifyResetPasswordTokenAndResetPassword = async (req, res) => {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const verification = await Verification.findOne({
-      userId,
-      token,
-    });
+    const verification = await Verification.findOne({ userId, token });
 
     if (!verification) {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const isTokenExpired = verification.expiresAt < new Date();
-
-    if (isTokenExpired) {
+    if (verification.expiresAt < new Date()) {
       return res.status(401).json({ message: "Token expired" });
     }
 
@@ -312,20 +296,19 @@ const verifyResetPasswordTokenAndResetPassword = async (req, res) => {
     }
 
     const salt = await bcrypt.genSalt(10);
-
     const hashPassword = await bcrypt.hash(newPassword, salt);
 
     user.password = hashPassword;
     await user.save();
-
     await Verification.findByIdAndDelete(verification._id);
 
-    res.status(200).json({ message: "Password reset successfully" });
+    return res.status(200).json({ message: "Password reset successfully" });
   } catch (error) {
     console.log(error);
-    res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
+
 export {
   registerUser,
   loginUser,
