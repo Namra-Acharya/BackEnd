@@ -13,7 +13,18 @@ const app = express();
 // ✅ Enable CORS for frontend deployed on Vercel
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL, // e.g., https://your-app.vercel.app
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps, curl, etc.)
+      if (!origin) return callback(null, true);
+      // Remove trailing slash if present
+      const allowed = process.env.FRONTEND_URL.replace(/\/$/, "");
+      const reqOrigin = origin.replace(/\/$/, "");
+      if (reqOrigin === allowed) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
